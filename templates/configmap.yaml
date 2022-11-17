@@ -1,0 +1,11 @@
+{{ if .Values.injectConfig }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cloudbeaver.fullname" . }}
+  labels:
+    {{- include "cloudbeaver.labels" . | nindent 4 }}
+data:
+  cloudbeaver.conf: |- 
+{{ tpl (.Files.Get "conf/cloudbeaver.conf") $ | indent 4 }}
+{{end}}

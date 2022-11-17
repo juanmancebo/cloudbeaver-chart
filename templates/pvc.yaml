@@ -1,0 +1,25 @@
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cloudbeaver.fullname" . }}
+  labels:
+    {{- include "cloudbeaver.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.persistence.hostPath }}
+  storageClassName: ""
+  {{- end }}
+  accessModes:
+  {{- if not (empty .Values.persistence.accessModes) }}
+  {{- range .Values.persistence.accessModes }}
+    - {{ . | quote }}
+  {{- end }}
+  {{- else }}
+    - {{ .Values.persistence.accessMode | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size | quote }}
+  {{- include "cloudbeaver.storageClass" . | nindent 2 }}
+{{- end -}}
+

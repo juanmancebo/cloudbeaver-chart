@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cloudbeaver.fullname" . }}
+  labels:
+    {{- include "cloudbeaver.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.persistence.enabled }}
+  strategy:
+    type: Recreate
+  {{- end }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cloudbeaver.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- if .Values.injectConfig }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- end }}
+      labels:
+        {{- include "cloudbeaver.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "cloudbeaver.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  curl --silent --connect-timeout 15000 http://localhost:{{ .Values.containerPort }}/status | grep --quiet '\"health\":\"ok\"'
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -ec
+                - | 
+                  curl --silent --connect-timeout 15000 http://localhost:{{ .Values.containerPort }}/status | grep --quiet '\"health\":\"ok\"'
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: cloudbeaver-data
+              mountPath: /opt/cloudbeaver/workspace
+            {{- if .Values.extraVolumeMounts }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.extraVolumeMounts "context" $) | nindent 12 }}
+            {{- end }}
+            {{- if .Values.injectConfig }}
+            - name: cloudbeaver-config
+              mountPath: /opt/cloudbeaver/conf/cloudbeaver.conf
+              subPath: cloudbeaver.conf
+            {{- end }}            
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: cloudbeaver-data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "cloudbeaver.name" . ) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+          {{- if .Values.extraVolumes }}
+          {{- include "common.tplvalues.render" (dict "value" .Values.extraVolumes "context" $) | nindent 8 }}
+          {{- end }}
+        {{- if .Values.injectConfig }}
+        - name: cloudbeaver-config
+          configMap:
+            name: {{ include "cloudbeaver.fullname" . }}
+        {{- end }}
+
+
